@@ -1,0 +1,423 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>239001 15 Events</title>
+    <style>
+        body {
+            background-color: #1B1F3A;
+            color: white;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: left;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            display: flex;
+            gap: 0px;
+            flex-wrap: wrap;
+            justify-content: left;
+            width: 100%;
+            padding: 0px;
+        }
+        #player-container {
+            width: 100%;
+            max-width: 1080px;
+        }
+        #player {
+            width: 100%;
+            height: auto;
+            aspect-ratio: 16 / 9;
+        }
+        .event-log {
+            width: 100%;
+            max-width: 260px;
+            max-height: 608px;
+            overflow-y: auto;
+            padding: 0px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .navigation-buttons {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .nav-button {
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .prev-button {
+            background-color: #4CAF50; /* Green */
+        }
+        .next-button {
+            background-color: #2196F3; /* Blue */
+        }
+        .filter-container {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .filter-container label, .filter-container select {
+            font-size: 12px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 4px;
+            text-align: left;
+            font-size: 12px;
+        }
+        th {
+            background-color: #333;
+            font-weight: bold;
+            cursor: pointer;
+            position: relative;
+        }
+        th:hover {
+            background-color: #444;
+        }
+        th.sorted:after {
+            content: attr(data-sort-indicator);
+            position: absolute;
+            right: 2px;
+            top: 4px;
+        }
+        tr:hover {
+            background-color: #555;
+            cursor: pointer;
+        }
+        tr.active {
+            background-color: rgba(255, 215, 0, 0.3); /* Highlight color */
+        }
+        tr.hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="player-container">
+            <div id="player"></div>
+        </div>
+        <div class="event-log">
+            <div class="navigation-buttons">
+                <button id="prevButton" class="nav-button prev-button">Prev</button>
+                <div class="filter-container">
+                    <label for="teamFilter">Team:</label>
+                    <select id="teamFilter">
+                        <option value="All">All</option>
+                    </select>
+                </div>
+                <button id="nextButton" class="nav-button next-button">Next</button>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th class="sortable" data-sort="num" data-sort-dir="asc" data-sort-indicator="↑↓">#</th>
+                        <th class="sortable" data-sort="time" data-sort-dir="asc" data-sort-indicator="↑↓">Time</th>
+                        <th class="sortable" data-sort="team" data-sort-dir="asc" data-sort-indicator="↑↓">Team</th>
+                        <th class="sortable" data-sort="type" data-sort-dir="asc" data-sort-indicator="↑↓">Event</th>
+                        <th class="sortable" data-sort="details" data-sort-dir="asc" data-sort-indicator="↑↓">Details</th>
+                    </tr>
+                </thead>
+                <tbody id="eventTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let player;
+        let events = [];
+        let currentEventIndex = -1;
+        let currentSortColumn = "num";
+        let currentSortDirection = "asc";
+        let currentFilterTeam = "All";
+
+        function onYouTubeIframeAPIReady() {
+            player = new YT.Player('player', {
+                height: '450',
+                width: '800',
+                videoId: 'TMLaUJFJUOM',
+                events: {
+                    'onStateChange': onPlayerStateChange
+                }
+            });
+        }
+        
+        function onPlayerStateChange(event) {
+            if (event.data == YT.PlayerState.PLAYING) {
+                startTimeCheck();
+            } else if (event.data == YT.PlayerState.PAUSED) {
+                stopTimeCheck();
+                updateCurrentEvent();
+                highlightCurrentRow();
+            }
+        }
+
+        let timeCheckInterval;
+        function startTimeCheck() {
+            timeCheckInterval = setInterval(() => {
+                updateCurrentEvent();
+                highlightCurrentRow();
+            }, 500);
+        }
+
+        function stopTimeCheck() {
+            clearInterval(timeCheckInterval);
+        }
+
+        function getVisibleRows() {
+            return Array.from(document.querySelectorAll("#eventTableBody tr")).filter(
+                row => row.style.display !== 'none'
+            );
+        }
+
+        function updateCurrentEvent() {
+            const currentTime = player.getCurrentTime();
+            const visibleRows = getVisibleRows();
+            
+            let nearestRow = null;
+            let nearestDiff = Infinity;
+            let nearestIndex = -1;
+            
+            visibleRows.forEach((row, index) => {
+                const rowTime = parseFloat(row.dataset.seconds);
+                const diff = Math.abs(rowTime - currentTime);
+                
+                if (diff < nearestDiff) {
+                    nearestDiff = diff;
+                    nearestRow = row;
+                    nearestIndex = index;
+                }
+            });
+            
+            if (nearestIndex !== -1) {
+                currentEventIndex = nearestIndex;
+            }
+        }
+
+        function highlightCurrentRow() {
+            document.querySelectorAll("#eventTableBody tr").forEach(row => {
+                row.classList.remove("active");
+            });
+            
+            const visibleRows = getVisibleRows();
+            if (currentEventIndex >= 0 && currentEventIndex < visibleRows.length) {
+                visibleRows[currentEventIndex].classList.add("active");
+                visibleRows[currentEventIndex].scrollIntoView({ behavior: "smooth", block: "nearest" });
+            }
+        }
+
+        function navigateToPrevious() {
+            const visibleRows = getVisibleRows();
+            if (currentEventIndex > 0) {
+                currentEventIndex--;
+                const row = visibleRows[currentEventIndex];
+                const videoTime = parseFloat(row.dataset.seconds);
+                player.seekTo(videoTime, true);
+                highlightCurrentRow();
+            }
+        }
+
+        function navigateToNext() {
+            const visibleRows = getVisibleRows();
+            if (currentEventIndex < visibleRows.length - 1) {
+                currentEventIndex++;
+                const row = visibleRows[currentEventIndex];
+                const videoTime = parseFloat(row.dataset.seconds);
+                player.seekTo(videoTime, true);
+                highlightCurrentRow();
+            }
+        }
+        
+        function applyFilters() {
+            document.querySelectorAll("#eventTableBody tr").forEach(row => {
+                row.style.display = (currentFilterTeam === "All" || row.dataset.team === currentFilterTeam) ? "" : "none";
+            });
+            
+            // Reset current index when filter changes
+            currentEventIndex = -1;
+            updateCurrentEvent();
+            highlightCurrentRow();
+        }
+        
+        function sortTable(column) {
+            if (currentSortColumn === column) {
+                // Toggle direction if same column
+                currentSortDirection = currentSortDirection === "asc" ? "desc" : "asc";
+            } else {
+                // New column, default to ascending
+                currentSortColumn = column;
+                currentSortDirection = "asc";
+            }
+            
+            // Update header indicators
+            document.querySelectorAll("th.sortable").forEach(th => {
+                if (th.dataset.sort === column) {
+                    th.classList.add("sorted");
+                    th.dataset.sortIndicator = currentSortDirection === "asc" ? "↑" : "↓";
+                } else {
+                    th.classList.remove("sorted");
+                    th.dataset.sortIndicator = "↑↓";
+                }
+            });
+            
+            // Sort the events array
+            events.sort((a, b) => {
+                let valA, valB;
+                
+                switch(column) {
+                    case "num":
+                        valA = a.num;
+                        valB = b.num;
+                        break;
+                    case "time":
+                        valA = a.seconds;
+                        valB = b.seconds;
+                        break;
+                    default:
+                        valA = a[column].toString().toLowerCase();
+                        valB = b[column].toString().toLowerCase();
+                }
+                
+                if (typeof valA === "number" && typeof valB === "number") {
+                    return currentSortDirection === "asc" ? valA - valB : valB - valA;
+                } else {
+                    return currentSortDirection === "asc" 
+                        ? valA.localeCompare(valB) 
+                        : valB.localeCompare(valA);
+                }
+            });
+            
+            // Clear and rebuild the table
+            const tableBody = document.getElementById("eventTableBody");
+            tableBody.innerHTML = "";
+            
+            events.forEach(eventObj => {
+                const row = createEventRow(eventObj);
+                tableBody.appendChild(row);
+            });
+            
+            // Reapply filters to show/hide rows
+            applyFilters();
+        }
+        
+        function createEventRow(eventObj) {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+                <td>${eventObj.num}</td>
+                <td>${eventObj.time}</td>
+                <td>${eventObj.team}</td>
+                <td>${eventObj.type}</td>
+                <td>${eventObj.details}</td>
+            `;
+            row.dataset.num = eventObj.num;
+            row.dataset.time = eventObj.time;
+            row.dataset.team = eventObj.team;
+            row.dataset.seconds = eventObj.seconds;
+            
+            row.addEventListener("click", function() {
+                const videoTime = parseFloat(this.dataset.seconds);
+                const isPlaying = player.getPlayerState() === 1;
+                player.seekTo(videoTime, true);
+                if (!isPlaying) player.pauseVideo();
+                
+                // Find index among visible rows
+                const visibleRows = getVisibleRows();
+                currentEventIndex = visibleRows.indexOf(this);
+                highlightCurrentRow();
+            });
+            
+            return row;
+        }
+        
+        document.addEventListener("DOMContentLoaded", function() {
+            const eventList = `
+1\t0:1:42\t3\tOffside\t
+2\t0:1:42\t4\tOffside\t
+3\t0:10:51\t15\tNo libera Portador/Pelota\t
+4\t0:22:19\t9\tEntra por el costado\t
+5\t0:25:36\t6\tSe suelta en Scrum\t
+6\t0:28:21\t2\tNo se aleja\t
+7\t0:35:40\t11\tNo detiene el Juego\t
+8\t0:37:12\t11\tAgresiÃ³n fÃ­sica/verbal\t
+9\t0:44:2\t18\tImpide Tacklear\t
+10\t1:16:19\t18\tNo estÃ¡ sobre sus pies\t
+`.trim().split("\n");
+            
+            const tableBody = document.getElementById("eventTableBody");
+            const teamFilter = document.getElementById("teamFilter");
+            const teams = new Set(["All"]);
+            
+            // Process event list
+            eventList.forEach(line => {
+                const [num, time, team, type, details] = line.split("\t");
+                teams.add(team);
+                
+                // Convert time to seconds
+                const [hh, mm, ss] = time.split(":").map(Number);
+                const videoTime = hh * 3600 + mm * 60 + ss;
+                
+                // Store event data
+                const eventObj = {
+                    num: parseInt(num),
+                    time: time,
+                    team: team,
+                    type: type,
+                    details: details,
+                    seconds: videoTime
+                };
+                
+                events.push(eventObj);
+                
+                const row = createEventRow(eventObj);
+                tableBody.appendChild(row);
+            });
+            
+            // Sort events by event number by default
+            events.sort((a, b) => a.num - b.num);
+            
+            // Set up team filter
+            teams.forEach(team => {
+                const option = document.createElement("option");
+                option.value = team;
+                option.textContent = team;
+                teamFilter.appendChild(option);
+            });
+            
+            teamFilter.addEventListener("change", function() {
+                currentFilterTeam = this.value;
+                applyFilters();
+            });
+            
+            // Set up navigation buttons
+            document.getElementById("prevButton").addEventListener("click", navigateToPrevious);
+            document.getElementById("nextButton").addEventListener("click", navigateToNext);
+            
+            // Set up sorting
+            document.querySelectorAll("th.sortable").forEach(th => {
+                th.addEventListener("click", function() {
+                    sortTable(this.dataset.sort);
+                });
+            });
+            
+            // Initial sort indicator
+            document.querySelector(`th[data-sort="num"]`).classList.add("sorted");
+            document.querySelector(`th[data-sort="num"]`).dataset.sortIndicator = "↑";
+        });
+    </script>
+    
+    <script src="https://www.youtube.com/iframe_api"></script>
+</body>
+</html>
